@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>매크로 대시보드</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --yellow: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; font-weight: 700; color: var(--blue); }
+  #last-update { font-size: 12px; color: var(--muted); }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* 섹션 타이틀 */
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 28px 0 12px;
+    border-left: 3px solid var(--blue);
+    padding-left: 10px;
+  }
+
+  /* 지표 카드 그리드 */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--blue); }
+  .card.active { border-color: var(--blue); background: #1c2433; }
+  .card-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .card-value { font-size: 22px; font-weight: 700; }
+  .card-change { font-size: 12px; margin-top: 4px; }
+  .card-date { font-size: 10px; color: var(--muted); margin-top: 6px; }
+  .up   { color: var(--green); }
+  .down { color: var(--red); }
+
+  /* 공포탐욕 */
+  #fear-greed-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .fg-score {
+    font-size: 52px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .fg-label { font-size: 14px; font-weight: 600; margin-top: 4px; text-transform: capitalize; }
+  .fg-gauge {
+    flex: 1;
+    background: linear-gradient(90deg, #f85149 0%, #d29922 50%, #3fb950 100%);
+    height: 10px;
+    border-radius: 5px;
+    position: relative;
+  }
+  .fg-needle {
+    position: absolute;
+    top: -4px;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 6px rgba(0,0,0,0.5);
+    transition: left 0.6s ease;
+  }
+  .fg-history { display: flex; gap: 20px; font-size: 12px; color: var(--muted); }
+  .fg-history span b { color: var(--text); }
+
+  /* 차트 */
+  #chart-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 12px;
+  }
+  #chart-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--blue); }
+  #myChart { width: 100% !important; height: 260px !important; }
+
+  /* 뉴스 */
+  #news-list { display: flex; flex-direction: column; gap: 8px; }
+  .news-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .news-item a { color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.4; flex: 1; }
+  .news-item a:hover { color: var(--blue); }
+  .news-date { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  .loading { color: var(--muted); font-size: 13px; padding: 20px 0; }
+  .error-msg { color: var(--red); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 매크로 대시보드</h1>
+  <span id="last-update">로딩 중...</span>
+</header>
+
+<main>
+
+  <!-- 시장 지표 -->
+  <div class="section-title">시장 지표</div>
+  <div class="cards" id="market-cards">
+    <div class="loading">데이터 불러오는 중...</div>
+  </div>
+
+  <!-- 공포탐욕지수 -->
+  <div class="section-title">공포탐욕지수 (CNN)</div>
+  <div id="fear-greed-card"><div class="loading">로딩 중...</div></div>
+
+  <!-- 매크로 지표 -->
+  <div class="section-title">매크로 지표 (클릭하면 차트)</div>
+  <div class="cards" id="macro-cards">
+    <div class="loading">데이터 불러오는 중...</div>
+  </div>
+
+  <!-- 차트 -->
+  <div id="chart-section" style="display:none">
+    <div id="chart-title"></div>
+    <canvas id="myChart"></canvas>
+  </div>
+
+  <!-- 뉴스 -->
+  <div class="section-title">글로벌 금융 뉴스</div>
+  <div id="news-list"><div class="loading">뉴스 불러오는 중...</div></div>
+
+</main>
+
+<script>
+const API = "http://localhost:5000/api";
+let chartInstance = null;
+let activeChartKey = null;
+
+const MARKET_LABELS = {
+  kospi:  { label: "코스피",    unit: "" },
+  kosdaq: { label: "코스닥",    unit: "" },
+  sp500:  { label: "S&P 500",   unit: "" },
+  nasdaq: { label: "나스닥",    unit: "" },
+  vix:    { label: "VIX",       unit: "" },
+  usdkrw: { label: "원/달러",   unit: "₩" },
+};
+
+const MACRO_LABELS = {
+  m2:           { label: "M2 통화량",       unit: "십억달러", chartKey: "m2" },
+  rrp:          { label: "RRP (역레포)",     unit: "십억달러", chartKey: "rrp" },
+  fed_balance:  { label: "Fed 대차대조표",   unit: "백만달러", chartKey: "fed_balance" },
+  fed_rate:     { label: "기준금리",         unit: "%",       chartKey: "fed_rate" },
+  treasury_10y: { label: "미국채 10년",      unit: "%",       chartKey: "treasury_10y" },
+  treasury_2y:  { label: "미국채 2년",       unit: "%",       chartKey: "treasury_2y" },
+};
+
+const FG_COLORS = {
+  "extreme fear": "#f85149",
+  "fear":         "#e07b40",
+  "neutral":      "#d29922",
+  "greed":        "#5cb85c",
+  "extreme greed":"#3fb950",
+};
+
+async function loadMarket() {
+  try {
+    const res = await fetch(`${API}/market`);
+    const json = await res.json();
+    if (json.status !== "ok") throw new Error(json.message);
+    const d = json.data;
+    const container = document.getElementById("market-cards");
+    container.innerHTML = Object.entries(MARKET_LABELS).map(([key, meta]) => {
+      const item = d[key];
+      if (!item) return "";
+      const chg = item.change_pct;
+      const cls = chg >= 0 ? "up" : "down";
+      const arrow = chg >= 0 ? "▲" : "▼";
+      return `
+        <div class="card">
+          <div class="card-label">${meta.label}</div>
+          <div class="card-value">${meta.unit}${item.value.toLocaleString()}</div>
+          <div class="card-change ${cls}">${arrow} ${Math.abs(chg).toFixed(2)}%</div>
+        </div>`;
+    }).join("");
+  } catch(e) {
+    document.getElementById("market-cards").innerHTML = `<div class="error-msg">오류: ${e.message}</div>`;
+  }
+}
+
+async function loadFearGreed() {
+  try {
+    const res = await fetch(`${API}/fear-greed`);
+    const json = await res.json();
+    if (json.status !== "ok") throw new Error(json.message);
+    const d = json.data;
+    const color = FG_COLORS[d.rating] || "#d29922";
+    const pct = d.score;
+    document.getElementById("fear-greed-card").innerHTML = `
+      <div>
+        <div class="fg-score" style="color:${color}">${d.score}</div>
+        <div class="fg-label" style="color:${color}">${translateRating(d.rating)}</div>
+      </div>
+      <div style="flex:1">
+        <div class="fg-gauge">
+          <div class="fg-needle" style="left:${pct}%"></div>
+        </div>
+        <div class="fg-history" style="margin-top:14px">
+          <span>전일 <b>${d.prev_close}</b></span>
+          <span>1주전 <b>${d.prev_week}</b></span>
+          <span>1달전 <b>${d.prev_month}</b></span>
+        </div>
+      </div>`;
+  } catch(e) {
+    document.getElementById("fear-greed-card").innerHTML = `<div class="error-msg">오류: ${e.message}</div>`;
+  }
+}
+
+function translateRating(r) {
+  const map = { "extreme fear":"극단적 공포","fear":"공포","neutral":"중립","greed":"탐욕","extreme greed":"극단적 탐욕" };
+  return map[r] || r;
+}
+
+async function loadMacro() {
+  try {
+    const res = await fetch(`${API}/macro`);
+    const json = await res.json();
+    if (json.status !== "ok") throw new Error(json.message);
+    const d = json.data;
+    const container = document.getElementById("macro-cards");
+    container.innerHTML = Object.entries(MACRO_LABELS).map(([key, meta]) => {
+      const item = d[key];
+      if (!item) return "";
+      const val = item.value >= 1000
+        ? (item.value / 1000).toFixed(1) + "K"
+        : item.value.toLocaleString();
+      return `
+        <div class="card" id="card-${key}" onclick="loadChart('${key}', '${meta.label}')">
+          <div class="card-label">${meta.label}</div>
+          <div class="card-value">${val}</div>
+          <div class="card-change" style="color:var(--muted)">${meta.unit}</div>
+          <div class="card-date">${item.date}</div>
+        </div>`;
+    }).join("");
+  } catch(e) {
+    document.getElementById("macro-cards").innerHTML = `<div class="error-msg">오류: ${e.message}</div>`;
+  }
+}
+
+async function loadChart(key, label) {
+  if (activeChartKey === key) {
+    document.getElementById("chart-section").style.display = "none";
+    document.querySelectorAll(".card").forEach(c => c.classList.remove("active"));
+    activeChartKey = null;
+    return;
+  }
+  activeChartKey = key;
+  document.querySelectorAll(".card").forEach(c => c.classList.remove("active"));
+  const el = document.getElementById(`card-${key}`);
+  if (el) el.classList.add("active");
+
+  const section = document.getElementById("chart-section");
+  section.style.display = "block";
+  document.getElementById("chart-title").textContent = `${label} 추이 (최근 2년)`;
+
+  try {
+    const res = await fetch(`${API}/chart/${key}`);
+    const json = await res.json();
+    if (json.status !== "ok") throw new Error(json.message);
+    const labels = json.data.map(d => d.date);
+    const values = json.data.map(d => d.value);
+
+    if (chartInstance) chartInstance.destroy();
+    const ctx = document.getElementById("myChart").getContext("2d");
+    chartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          borderColor: "#58a6ff",
+          backgroundColor: "rgba(88,166,255,0.08)",
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: {
+            ticks: { color: "#8b949e", maxTicksLimit: 8, font: { size: 11 } },
+            grid: { color: "#21262d" }
+          },
+          y: {
+            ticks: { color: "#8b949e", font: { size: 11 } },
+            grid: { color: "#21262d" }
+          }
+        }
+      }
+    });
+  } catch(e) {
+    document.getElementById("chart-title").textContent = `오류: ${e.message}`;
+  }
+}
+
+async function loadNews() {
+  try {
+    const res = await fetch(`${API}/news`);
+    const json = await res.json();
+    if (json.status !== "ok") throw new Error(json.message);
+    const container = document.getElementById("news-list");
+    container.innerHTML = json.data.map(item => {
+      const date = item.date ? new Date(item.date).toLocaleString("ko-KR", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+      return `
+        <div class="news-item">
+          <a href="${item.link}" target="_blank" rel="noopener">${item.title}</a>
+          <span class="news-date">${date}</span>
+        </div>`;
+    }).join("");
+  } catch(e) {
+    document.getElementById("news-list").innerHTML = `<div class="error-msg">오류: ${e.message}</div>`;
+  }
+}
+
+async function init() {
+  await Promise.all([loadMarket(), loadFearGreed(), loadMacro(), loadNews()]);
+  document.getElementById("last-update").textContent =
+    "마지막 업데이트: " + new Date().toLocaleString("ko-KR");
+}
+
+init();
+setInterval(init, 5 * 60 * 1000); // 5분마다 자동 갱신
+</script>
+</body>
+</html>
