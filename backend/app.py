@@ -30,7 +30,7 @@ def cache_set(key, data):
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 
-def fred_get(series_id, limit=1):
+def fred_get(series_id, limit=1, retries=3):
     params = {
         "series_id": series_id,
         "api_key": FRED_API_KEY,
@@ -38,10 +38,20 @@ def fred_get(series_id, limit=1):
         "sort_order": "desc",
         "limit": limit,
     }
-    res = requests.get(FRED_BASE, params=params, timeout=20)
-    data = res.json()
-    obs = [o for o in data.get("observations", []) if o["value"] != "."]
-    return obs
+    for attempt in range(retries):
+        try:
+            res = requests.get(FRED_BASE, params=params, timeout=20)
+            data = res.json()
+            obs = [o for o in data.get("observations", []) if o["value"] != "."]
+            if obs:
+                return obs
+            # 값이 비어있으면 limit 늘려서 재시도 (최근 데이터가 "."일 수 있음)
+            params["limit"] = limit + (attempt + 1) * 5
+        except Exception:
+            if attempt == retries - 1:
+                raise
+            time.sleep(1)
+    return []
 
 def fred_history(series_id, days=365):
     start = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
@@ -80,6 +90,11 @@ def macro():
                 result[key] = {"value": float(obs[0]["value"]), "date": obs[0]["date"], "unit": unit}
         except Exception:
             pass
+
+    # 실패한 항목 로그
+    failed = [k for k, v in result.items() if v is None] if result else []
+    if failed:
+        print(f"[WARN] 누락된 FRED 시리즈: {failed}", flush=True)
 
     # 장단기 금리차 계산 (10년 - 2년)
     try:
