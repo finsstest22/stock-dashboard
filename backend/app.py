@@ -206,6 +206,13 @@ def news():
         headers = {"User-Agent": "Mozilla/5.0"}
         items = []
 
+        def clean_html(text):
+            """HTML 태그 제거"""
+            import re
+            text = re.sub(r"<[^>]+>", "", text or "")
+            text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&#39;", "'").replace("&quot;", '"')
+            return text.strip()
+
         for source, feed_url in kr_feeds:
             try:
                 res = requests.get(feed_url, headers=headers, timeout=10)
@@ -214,8 +221,9 @@ def news():
                     title = item.findtext("title", "").strip()
                     link  = item.findtext("link", "").strip()
                     pub   = item.findtext("pubDate", "")
+                    desc  = clean_html(item.findtext("description", ""))[:400]
                     if title:
-                        items.append({"title": title, "link": link, "date": pub, "source": source})
+                        items.append({"title": title, "summary": desc, "link": link, "date": pub, "source": source})
             except:
                 pass
 
@@ -227,12 +235,15 @@ def news():
                     title = item.findtext("title", "").strip()
                     link  = item.findtext("link", "").strip()
                     pub   = item.findtext("pubDate", "")
+                    desc  = clean_html(item.findtext("description", ""))[:400]
                     if title:
                         try:
                             title_ko = translator.translate(title)
+                            desc_ko  = translator.translate(desc) if desc else ""
                         except:
                             title_ko = title
-                        items.append({"title": title_ko, "title_en": title, "link": link, "date": pub, "source": source})
+                            desc_ko  = desc
+                        items.append({"title": title_ko, "title_en": title, "summary": desc_ko, "link": link, "date": pub, "source": source})
             except:
                 pass
 

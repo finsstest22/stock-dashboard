@@ -130,6 +130,84 @@
 
   .loading { color: var(--muted); font-size: 13px; padding: 20px 0; }
   .error-msg { color: var(--red); font-size: 12px; }
+
+  /* 뉴스 모달 */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+  }
+  .modal-source {
+    font-size: 11px;
+    color: var(--blue);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .modal-title {
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+  .modal-summary {
+    font-size: 14px;
+    color: #c9d1d9;
+    line-height: 1.8;
+    margin-bottom: 24px;
+    white-space: pre-line;
+  }
+  .modal-no-summary {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    font-style: italic;
+  }
+  .modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  .btn-close {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .btn-close:hover { background: var(--border); }
+  .btn-link {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: none;
+    background: var(--blue);
+    color: #0d1117;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .btn-link:hover { opacity: 0.85; }
+  .news-item { cursor: pointer; }
+  .news-item:hover { border-color: var(--blue); }
 </style>
 </head>
 <body>
@@ -168,6 +246,19 @@
   <div id="news-list"><div class="loading">뉴스 불러오는 중...</div></div>
 
 </main>
+
+<!-- 뉴스 모달 -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-source" id="modal-source"></div>
+    <div class="modal-title" id="modal-title"></div>
+    <div id="modal-summary"></div>
+    <div class="modal-footer">
+      <button class="btn-close" onclick="closeModal()">닫기</button>
+      <a class="btn-link" id="modal-link" target="_blank" rel="noopener">기사 원문 보기 →</a>
+    </div>
+  </div>
+</div>
 
 <script>
 const API = "https://stock-dashboard-api-iprv.onrender.com/api";
@@ -350,11 +441,12 @@ async function loadNews() {
     const json = await res.json();
     if (json.status !== "ok") throw new Error(json.message);
     const container = document.getElementById("news-list");
-    container.innerHTML = json.data.map(item => {
+    newsDataGlobal = json.data;
+    container.innerHTML = newsDataGlobal.map((item, idx) => {
       const date = item.date ? new Date(item.date).toLocaleString("ko-KR", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
       return `
-        <div class="news-item">
-          <a href="${item.link}" target="_blank" rel="noopener">${item.title}</a>
+        <div class="news-item" onclick="openModal(${idx})">
+          <span style="font-size:13px;line-height:1.4;flex:1">${item.title}</span>
           <div style="display:flex;gap:8px;align-items:center;white-space:nowrap">
             <span style="font-size:11px;color:var(--blue);opacity:0.8">${item.source || ""}</span>
             <span class="news-date">${date}</span>
@@ -372,8 +464,36 @@ async function init() {
     "마지막 업데이트: " + new Date().toLocaleString("ko-KR");
 }
 
+let newsDataGlobal = [];
+
+function openModal(idx) {
+  const item = newsDataGlobal[idx];
+  if (!item) return;
+  document.getElementById("modal-source").textContent = item.source || "";
+  document.getElementById("modal-title").textContent = item.title;
+  document.getElementById("modal-link").href = item.link;
+  const summaryEl = document.getElementById("modal-summary");
+  if (item.summary) {
+    summaryEl.className = "modal-summary";
+    summaryEl.textContent = item.summary;
+  } else {
+    summaryEl.className = "modal-no-summary";
+    summaryEl.textContent = "요약 정보가 없습니다.";
+  }
+  document.getElementById("modal-overlay").classList.add("open");
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById("modal-overlay")) return;
+  document.getElementById("modal-overlay").classList.remove("open");
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") document.getElementById("modal-overlay").classList.remove("open");
+});
+
 init();
-setInterval(init, 5 * 60 * 1000); // 5분마다 자동 갱신
+setInterval(init, 5 * 60 * 1000);
 </script>
 </body>
 </html>
