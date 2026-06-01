@@ -51,11 +51,15 @@
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 16px;
+    padding: 20px;
     cursor: pointer;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background 0.2s;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
-  .card:hover { border-color: var(--blue); }
+  .card:hover { border-color: var(--blue); background: #1c2433; }
   .card.active { border-color: var(--blue); background: #1c2433; }
   .card-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
   .card-value { font-size: 22px; font-weight: 700; }
