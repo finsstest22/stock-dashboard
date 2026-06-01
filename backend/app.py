@@ -1,12 +1,24 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
-import json
 from datetime import datetime, timedelta
 from config import FRED_API_KEY
+import time
 
 app = Flask(__name__)
 CORS(app)
+
+# 간단한 메모리 캐시
+_cache = {}
+
+def cache_get(key):
+    entry = _cache.get(key)
+    if entry and time.time() - entry["ts"] < 300:  # 5분
+        return entry["data"]
+    return None
+
+def cache_set(key, data):
+    _cache[key] = {"data": data, "ts": time.time()}
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 
@@ -40,6 +52,9 @@ def fred_history(series_id, days=365):
 @app.route("/api/macro")
 def macro():
     """M2, 금리, RRP, Fed 대차대조표 최신값"""
+    cached = cache_get("macro")
+    if cached:
+        return jsonify({"status": "ok", "data": cached})
     try:
         result = {}
 
@@ -73,6 +88,7 @@ def macro():
         if t2:
             result["treasury_2y"] = {"value": float(t2[0]["value"]), "date": t2[0]["date"], "unit": "%"}
 
+        cache_set("macro", result)
         return jsonify({"status": "ok", "data": result})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -81,6 +97,9 @@ def macro():
 @app.route("/api/market")
 def market():
     """VIX, 코스피, 코스닥, S&P500, 나스닥, 원달러"""
+    cached = cache_get("market")
+    if cached:
+        return jsonify({"status": "ok", "data": cached})
     try:
         import yfinance as yf
         tickers = {
@@ -106,6 +125,7 @@ def market():
                     }
             except:
                 pass
+        cache_set("market", result)
         return jsonify({"status": "ok", "data": result})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -114,6 +134,9 @@ def market():
 @app.route("/api/fear-greed")
 def fear_greed():
     """CNN 공포탐욕지수"""
+    cached = cache_get("fear_greed")
+    if cached:
+        return jsonify({"status": "ok", "data": cached})
     try:
         url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
         headers = {
@@ -124,13 +147,15 @@ def fear_greed():
         res = requests.get(url, headers=headers, timeout=10)
         data = res.json()
         fg = data["fear_and_greed"]
-        return jsonify({"status": "ok", "data": {
+        result = {
             "score": round(fg["score"]),
             "rating": fg["rating"],
             "prev_close": round(fg.get("previous_close", 0)),
             "prev_week":  round(fg.get("previous_1_week", 0)),
             "prev_month": round(fg.get("previous_1_month", 0)),
-        }})
+        }
+        cache_set("fear_greed", result)
+        return jsonify({"status": "ok", "data": result})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -158,32 +183,61 @@ def chart(series):
 
 @app.route("/api/news")
 def news():
-    """Yahoo Finance + CNBC RSS 뉴스 (한글 번역)"""
+    """네이버 + Yahoo Finance + CNBC 뉴스 (영문은 한글 번역)"""
+    cached = cache_get("news")
+    if cached:
+        return jsonify({"status": "ok", "data": cached})
     try:
         import xml.etree.ElementTree as ET
         from deep_translator import GoogleTranslator
         translator = GoogleTranslator(source="en", target="ko")
 
-        feeds = [
-            "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US",
-            "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664",
+        # 한국 뉴스 (이미 한글)
+        kr_feeds = [
+            ("연합뉴스", "https://www.yonhapnewstv.co.kr/category/news/economy/feed/"),
+            ("동아일보", "https://rss.donga.com/economy.xml"),
         ]
+        # 영문 뉴스 (번역 필요)
+        en_feeds = [
+            ("Yahoo Finance", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US"),
+            ("CNBC", "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664"),
+        ]
+
         headers = {"User-Agent": "Mozilla/5.0"}
         items = []
-        for feed_url in feeds:
-            res = requests.get(feed_url, headers=headers, timeout=10)
-            root = ET.fromstring(res.content)
-            for item in root.findall(".//item")[:8]:
-                title = item.findtext("title", "")
-                link  = item.findtext("link", "")
-                pub   = item.findtext("pubDate", "")
-                if title:
-                    try:
-                        title_ko = translator.translate(title)
-                    except:
-                        title_ko = title
-                    items.append({"title": title_ko, "title_en": title, "link": link, "date": pub})
-        return jsonify({"status": "ok", "data": items[:20]})
+
+        for source, feed_url in kr_feeds:
+            try:
+                res = requests.get(feed_url, headers=headers, timeout=10)
+                root = ET.fromstring(res.content)
+                for item in root.findall(".//item")[:6]:
+                    title = item.findtext("title", "").strip()
+                    link  = item.findtext("link", "").strip()
+                    pub   = item.findtext("pubDate", "")
+                    if title:
+                        items.append({"title": title, "link": link, "date": pub, "source": source})
+            except:
+                pass
+
+        for source, feed_url in en_feeds:
+            try:
+                res = requests.get(feed_url, headers=headers, timeout=10)
+                root = ET.fromstring(res.content)
+                for item in root.findall(".//item")[:5]:
+                    title = item.findtext("title", "").strip()
+                    link  = item.findtext("link", "").strip()
+                    pub   = item.findtext("pubDate", "")
+                    if title:
+                        try:
+                            title_ko = translator.translate(title)
+                        except:
+                            title_ko = title
+                        items.append({"title": title_ko, "title_en": title, "link": link, "date": pub, "source": source})
+            except:
+                pass
+
+        cache_set("news", items[:25])
+        return jsonify({"status": "ok", "data": items[:25]})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
