@@ -11,9 +11,17 @@ CORS(app)
 # 간단한 메모리 캐시
 _cache = {}
 
+CACHE_TTL = {
+    "market": 30,      # 30초
+    "fear_greed": 300, # 5분
+    "macro": 300,
+    "news": 300,
+}
+
 def cache_get(key):
     entry = _cache.get(key)
-    if entry and time.time() - entry["ts"] < 300:  # 5분
+    ttl = CACHE_TTL.get(key, 300)
+    if entry and time.time() - entry["ts"] < ttl:
         return entry["data"]
     return None
 
