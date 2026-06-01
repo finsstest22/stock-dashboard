@@ -30,7 +30,7 @@ def fred_get(series_id, limit=1):
         "sort_order": "desc",
         "limit": limit,
     }
-    res = requests.get(FRED_BASE, params=params, timeout=10)
+    res = requests.get(FRED_BASE, params=params, timeout=20)
     data = res.json()
     obs = [o for o in data.get("observations", []) if o["value"] != "."]
     return obs
@@ -44,7 +44,7 @@ def fred_history(series_id, days=365):
         "sort_order": "asc",
         "observation_start": start,
     }
-    res = requests.get(FRED_BASE, params=params, timeout=10)
+    res = requests.get(FRED_BASE, params=params, timeout=20)
     data = res.json()
     return [o for o in data.get("observations", []) if o["value"] != "."]
 
@@ -55,43 +55,29 @@ def macro():
     cached = cache_get("macro")
     if cached:
         return jsonify({"status": "ok", "data": cached})
-    try:
-        result = {}
 
-        # M2 통화량 (조 달러)
-        m2 = fred_get("M2SL", 1)
-        if m2:
-            result["m2"] = {"value": float(m2[0]["value"]), "date": m2[0]["date"], "unit": "십억달러"}
+    series_list = [
+        ("m2",           "M2SL",      "십억달러"),
+        ("fed_rate",     "FEDFUNDS",  "%"),
+        ("rrp",          "RRPONTSYD", "십억달러"),
+        ("fed_balance",  "WALCL",     "백만달러"),
+        ("treasury_10y", "DGS10",     "%"),
+        ("treasury_2y",  "DGS2",      "%"),
+    ]
+    result = {}
+    for key, sid, unit in series_list:
+        try:
+            obs = fred_get(sid, 1)
+            if obs:
+                result[key] = {"value": float(obs[0]["value"]), "date": obs[0]["date"], "unit": unit}
+        except Exception:
+            pass
 
-        # 기준금리 (Federal Funds Effective Rate)
-        rate = fred_get("FEDFUNDS", 1)
-        if rate:
-            result["fed_rate"] = {"value": float(rate[0]["value"]), "date": rate[0]["date"], "unit": "%"}
+    if not result:
+        return jsonify({"status": "error", "message": "모든 FRED 요청 실패"}), 500
 
-        # RRP (역레포)
-        rrp = fred_get("RRPONTSYD", 1)
-        if rrp:
-            result["rrp"] = {"value": float(rrp[0]["value"]), "date": rrp[0]["date"], "unit": "십억달러"}
-
-        # Fed 대차대조표 총자산
-        balance = fred_get("WALCL", 1)
-        if balance:
-            result["fed_balance"] = {"value": float(balance[0]["value"]), "date": balance[0]["date"], "unit": "백만달러"}
-
-        # 10년물 국채 금리
-        t10 = fred_get("DGS10", 1)
-        if t10:
-            result["treasury_10y"] = {"value": float(t10[0]["value"]), "date": t10[0]["date"], "unit": "%"}
-
-        # 2년물 국채 금리
-        t2 = fred_get("DGS2", 1)
-        if t2:
-            result["treasury_2y"] = {"value": float(t2[0]["value"]), "date": t2[0]["date"], "unit": "%"}
-
-        cache_set("macro", result)
-        return jsonify({"status": "ok", "data": result})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    cache_set("macro", result)
+    return jsonify({"status": "ok", "data": result})
 
 
 @app.route("/api/market")
@@ -144,7 +130,7 @@ def fear_greed():
             "Referer": "https://www.cnn.com/markets/fear-and-greed",
             "Accept": "application/json",
         }
-        res = requests.get(url, headers=headers, timeout=10)
+        res = requests.get(url, headers=headers, timeout=20)
         data = res.json()
         fg = data["fear_and_greed"]
         result = {
@@ -215,7 +201,7 @@ def news():
 
         for source, feed_url in kr_feeds:
             try:
-                res = requests.get(feed_url, headers=headers, timeout=10)
+                res = requests.get(feed_url, headers=headers, timeout=20)
                 root = ET.fromstring(res.content)
                 for item in root.findall(".//item")[:6]:
                     title = item.findtext("title", "").strip()
@@ -229,7 +215,7 @@ def news():
 
         for source, feed_url in en_feeds:
             try:
-                res = requests.get(feed_url, headers=headers, timeout=10)
+                res = requests.get(feed_url, headers=headers, timeout=20)
                 root = ET.fromstring(res.content)
                 for item in root.findall(".//item")[:5]:
                     title = item.findtext("title", "").strip()
