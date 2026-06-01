@@ -158,9 +158,12 @@ def chart(series):
 
 @app.route("/api/news")
 def news():
-    """Yahoo Finance + CNBC RSS 뉴스"""
+    """Yahoo Finance + CNBC RSS 뉴스 (한글 번역)"""
     try:
         import xml.etree.ElementTree as ET
+        from deep_translator import GoogleTranslator
+        translator = GoogleTranslator(source="en", target="ko")
+
         feeds = [
             "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US",
             "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664",
@@ -175,7 +178,11 @@ def news():
                 link  = item.findtext("link", "")
                 pub   = item.findtext("pubDate", "")
                 if title:
-                    items.append({"title": title, "link": link, "date": pub})
+                    try:
+                        title_ko = translator.translate(title)
+                    except:
+                        title_ko = title
+                    items.append({"title": title_ko, "title_en": title, "link": link, "date": pub})
         return jsonify({"status": "ok", "data": items[:20]})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

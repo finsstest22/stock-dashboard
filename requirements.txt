@@ -4,3 +4,4 @@ requests==2.34.2
 beautifulsoup4==4.14.3
 yfinance
 gunicorn
+deep-translator
