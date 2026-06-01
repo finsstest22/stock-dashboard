@@ -81,8 +81,19 @@ def macro():
         except Exception:
             pass
 
-    if not result:
-        return jsonify({"status": "error", "message": "모든 FRED 요청 실패"}), 500
+    # 장단기 금리차 계산 (10년 - 2년)
+    try:
+        if "treasury_10y" in result and "treasury_2y" in result:
+            spread = round(result["treasury_10y"]["value"] - result["treasury_2y"]["value"], 2)
+            result["yield_spread"] = {"value": spread, "date": result["treasury_10y"]["date"], "unit": "%p"}
+    except Exception:
+        pass
+
+    # 데이터 없는 항목은 null로 채워서 항상 반환
+    all_keys = ["m2", "fed_rate", "rrp", "fed_balance", "treasury_10y", "treasury_2y", "yield_spread"]
+    for k in all_keys:
+        if k not in result:
+            result[k] = None
 
     cache_set("macro", result)
     return jsonify({"status": "ok", "data": result})
@@ -103,6 +114,9 @@ def market():
             "kospi":  "^KS11",
             "kosdaq": "^KQ11",
             "usdkrw": "KRW=X",
+            "dxy":    "DX-Y.NYB",
+            "wti":    "CL=F",
+            "gold":   "GC=F",
         }
         result = {}
         for key, symbol in tickers.items():

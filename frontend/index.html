@@ -215,6 +215,8 @@
 
   @keyframes flash { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
   .flash { animation: flash 0.5s ease; }
+  .card-unavailable { opacity: 0.5; cursor: default !important; }
+  .card-unavailable:hover { border-color: var(--border) !important; background: var(--card) !important; }
 
   /* 뉴스 2단 */
   .news-columns {
@@ -293,12 +295,15 @@ let chartInstance = null;
 let activeChartKey = null;
 
 const MARKET_LABELS = {
-  kospi:  { label: "코스피",    unit: "" },
-  kosdaq: { label: "코스닥",    unit: "" },
-  sp500:  { label: "S&P 500",   unit: "" },
-  nasdaq: { label: "나스닥",    unit: "" },
-  vix:    { label: "VIX",       unit: "" },
-  usdkrw: { label: "원/달러",   unit: "₩" },
+  kospi:  { label: "코스피",      unit: "" },
+  kosdaq: { label: "코스닥",      unit: "" },
+  sp500:  { label: "S&P 500",     unit: "" },
+  nasdaq: { label: "나스닥",      unit: "" },
+  vix:    { label: "VIX",         unit: "" },
+  usdkrw: { label: "원/달러",     unit: "₩" },
+  dxy:    { label: "달러인덱스",   unit: "" },
+  wti:    { label: "WTI 유가",     unit: "$" },
+  gold:   { label: "금 (Gold)",    unit: "$" },
 };
 
 const MACRO_LABELS = {
@@ -308,6 +313,7 @@ const MACRO_LABELS = {
   fed_rate:     { label: "기준금리",         unit: "%",       chartKey: "fed_rate" },
   treasury_10y: { label: "미국채 10년",      unit: "%",       chartKey: "treasury_10y" },
   treasury_2y:  { label: "미국채 2년",       unit: "%",       chartKey: "treasury_2y" },
+  yield_spread: { label: "장단기 금리차",    unit: "%p",      chartKey: null },
 };
 
 const FG_COLORS = {
@@ -388,14 +394,28 @@ async function loadMacro() {
     const container = document.getElementById("macro-cards");
     container.innerHTML = Object.entries(MACRO_LABELS).map(([key, meta]) => {
       const item = d[key];
-      if (!item) return "";
+      if (!item) {
+        // 데이터 없어도 카드 표시
+        return `
+          <div class="card card-unavailable" id="card-${key}">
+            <div class="card-label">${meta.label}</div>
+            <div class="card-value" style="color:var(--muted);font-size:16px">데이터 없음</div>
+            <div class="card-change" style="color:var(--muted)">${meta.unit}</div>
+          </div>`;
+      }
       const val = item.value >= 1000
         ? (item.value / 1000).toFixed(1) + "K"
         : item.value.toLocaleString();
+      const clickable = meta.chartKey ? `onclick="loadChart('${meta.chartKey}', '${meta.label}')"` : "";
+      const cursor    = meta.chartKey ? "" : "cursor:default";
+      // 장단기 금리차: 양수 파란색, 음수 빨간색
+      const spreadColor = key === "yield_spread"
+        ? (item.value >= 0 ? "color:var(--blue)" : "color:var(--red)")
+        : "";
       return `
-        <div class="card" id="card-${key}" onclick="loadChart('${key}', '${meta.label}')">
+        <div class="card" id="card-${key}" ${clickable} style="${cursor}">
           <div class="card-label">${meta.label}</div>
-          <div class="card-value">${val}</div>
+          <div class="card-value" style="${spreadColor}">${val}</div>
           <div class="card-change" style="color:var(--muted)">${meta.unit}</div>
           <div class="card-date">${item.date}</div>
         </div>`;
