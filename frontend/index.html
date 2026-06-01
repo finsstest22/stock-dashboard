@@ -245,9 +245,13 @@
     <canvas id="myChart"></canvas>
   </div>
 
-  <!-- 뉴스 -->
+  <!-- 국내 뉴스 -->
+  <div class="section-title">국내 금융 뉴스</div>
+  <div id="news-kr"><div class="loading">뉴스 불러오는 중...</div></div>
+
+  <!-- 글로벌 뉴스 -->
   <div class="section-title">글로벌 금융 뉴스</div>
-  <div id="news-list"><div class="loading">뉴스 불러오는 중...</div></div>
+  <div id="news-global"><div class="loading">뉴스 불러오는 중...</div></div>
 
 </main>
 
@@ -421,7 +425,23 @@ async function loadChart(key, label) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "#1c2433",
+            borderColor: "#58a6ff",
+            borderWidth: 1,
+            titleColor: "#8b949e",
+            bodyColor: "#e6edf3",
+            bodyFont: { size: 14, weight: "bold" },
+            padding: 12,
+            displayColors: false,
+            callbacks: {
+              label: ctx => " " + ctx.parsed.y.toLocaleString(),
+            }
+          }
+        },
         scales: {
           x: {
             ticks: { color: "#8b949e", maxTicksLimit: 8, font: { size: 11 } },
@@ -439,26 +459,39 @@ async function loadChart(key, label) {
   }
 }
 
+const KR_SOURCES = ["연합뉴스", "동아일보"];
+
+function renderNewsList(items, containerId) {
+  const container = document.getElementById(containerId);
+  if (!items.length) { container.innerHTML = `<div class="loading">뉴스가 없습니다.</div>`; return; }
+  container.innerHTML = items.map((item, idx) => {
+    const date = item.date ? new Date(item.date).toLocaleString("ko-KR", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+    return `
+      <div class="news-item" onclick="openModal(${item._idx})">
+        <span style="font-size:13px;line-height:1.4;flex:1">${item.title}</span>
+        <div style="display:flex;gap:8px;align-items:center;white-space:nowrap">
+          <span style="font-size:11px;color:var(--blue);opacity:0.8">${item.source || ""}</span>
+          <span class="news-date">${date}</span>
+        </div>
+      </div>`;
+  }).join("");
+}
+
 async function loadNews() {
   try {
     const res = await fetch(`${API}/news`);
     const json = await res.json();
     if (json.status !== "ok") throw new Error(json.message);
-    const container = document.getElementById("news-list");
-    newsDataGlobal = json.data;
-    container.innerHTML = newsDataGlobal.map((item, idx) => {
-      const date = item.date ? new Date(item.date).toLocaleString("ko-KR", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
-      return `
-        <div class="news-item" onclick="openModal(${idx})">
-          <span style="font-size:13px;line-height:1.4;flex:1">${item.title}</span>
-          <div style="display:flex;gap:8px;align-items:center;white-space:nowrap">
-            <span style="font-size:11px;color:var(--blue);opacity:0.8">${item.source || ""}</span>
-            <span class="news-date">${date}</span>
-          </div>
-        </div>`;
-    }).join("");
+    newsDataGlobal = json.data.map((item, idx) => ({ ...item, _idx: idx }));
+
+    const krNews     = newsDataGlobal.filter(i => KR_SOURCES.includes(i.source));
+    const globalNews = newsDataGlobal.filter(i => !KR_SOURCES.includes(i.source));
+
+    renderNewsList(krNews, "news-kr");
+    renderNewsList(globalNews, "news-global");
   } catch(e) {
-    document.getElementById("news-list").innerHTML = `<div class="error-msg">오류: ${e.message}</div>`;
+    document.getElementById("news-kr").innerHTML = `<div class="error-msg">오류: ${e.message}</div>`;
+    document.getElementById("news-global").innerHTML = "";
   }
 }
 
