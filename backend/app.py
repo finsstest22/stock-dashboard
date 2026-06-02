@@ -1,8 +1,8 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
 from datetime import datetime, timedelta
-from config import FRED_API_KEY
+from config import FRED_API_KEY, ANTHROPIC_API_KEY
 import time
 
 app = Flask(__name__)
@@ -272,6 +272,42 @@ def news():
 
         cache_set("news", items[:25])
         return jsonify({"status": "ok", "data": items[:25]})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    """Claude AI 주식 질문 답변"""
+    try:
+        data = request.get_json()
+        message = data.get("message", "").strip()
+        if not message:
+            return jsonify({"status": "error", "message": "질문이 없습니다."}), 400
+
+        res = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-haiku-4-5",
+                "max_tokens": 1024,
+                "system": (
+                    "당신은 주식, 매크로 경제, 투자 전략 전문가입니다. "
+                    "CM 주식연구소의 AI 어시스턴트로서 사용자의 투자 관련 질문에 "
+                    "명확하고 간결하게 한국어로 답변합니다. "
+                    "투자 결정은 본인 책임임을 항상 인지시켜 주세요."
+                ),
+                "messages": [{"role": "user", "content": message}],
+            },
+            timeout=30,
+        )
+        result = res.json()
+        answer = result["content"][0]["text"]
+        return jsonify({"status": "ok", "answer": answer})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
