@@ -312,15 +312,6 @@ def chat():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route("/api/debug-env")
-def debug_env():
-    """환경변수 확인 (키 앞 4자리만 표시)"""
-    import os
-    fred = os.environ.get("FRED_API_KEY", "")
-    return jsonify({
-        "FRED_API_KEY": fred[:4] + "****" if fred else "없음",
-        "env_vars": [k for k in os.environ if "KEY" in k or "API" in k]
-    })
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
